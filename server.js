@@ -1,3 +1,4 @@
+import express from "express";
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import { TypeSafeClient, choice, score, noul } from "@typesafe-ai/sdk";
@@ -5,7 +6,7 @@ import * as z from "zod/v4";
 
 const handler = createMcpHandler(({ requestInfo }) => {
   const server = new McpServer(
-    { name: "typesafe-mcp-key", version: "1.0.1" },
+    { name: "typesafe-mcp-key", version: "1.0.2" },
     {
       instructions:
         "TypeSafe System One MCP bridge. Provide grounded state and typed Choice, Score, or Noul questions."
@@ -45,19 +46,16 @@ const handler = createMcpHandler(({ requestInfo }) => {
           content: [{
             type: "text",
             text: JSON.stringify({
-              error: "Missing TypeSafe API key. Configure TYPESAFE_API_KEY or send X-TypeSafe-API-Key."
+              error: "Missing TypeSafe API key. Send X-TypeSafe-API-Key or configure TYPESAFE_API_KEY."
             })
           }],
           isError: true
         };
       }
 
-      const client = new TypeSafeClient({
-        apiKey,
-        logLevel: "off"
-      });
-
+      const client = new TypeSafeClient({ apiKey, logLevel: "off" });
       const typedQuestions = {};
+
       for (const [id, q] of Object.entries(questions)) {
         if (q.type === "choice") {
           typedQuestions[id] = choice(q.instructions, q.criteria ?? {});
@@ -74,10 +72,7 @@ const handler = createMcpHandler(({ requestInfo }) => {
           questions: typedQuestions,
           ...(model ? { model } : {})
         });
-
-        return {
-          content: [{ type: "text", text: JSON.stringify(result) }]
-        };
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
       } catch (error) {
         return {
           content: [{
@@ -95,7 +90,7 @@ const handler = createMcpHandler(({ requestInfo }) => {
   server.registerTool(
     "health",
     {
-      description: "Check the MCP bridge status without revealing credentials.",
+      description: "Check the MCP bridge without revealing credentials.",
       inputSchema: z.object({})
     },
     async () => ({
@@ -117,8 +112,9 @@ const handler = createMcpHandler(({ requestInfo }) => {
   return server;
 }, { responseMode: "json" });
 
-const nodeHandler = toNodeHandler(handler);
+const node = toNodeHandler(handler);
+const app = express();
+app.use(express.json({ limit: "4mb" }));
+app.all("/mcp", (req, res) => void node(req, res, req.body));
 
-export default function mcp(req, res) {
-  return nodeHandler(req, res);
-}
+export default app;
