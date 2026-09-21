@@ -1,15 +1,27 @@
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
+import { toNodeHandler } from "@modelcontextprotocol/node";
 import * as z from "zod/v4";
 
 const FREE_TEXT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
 const FREE_VISION_MODEL = "inclusionai/ling-3.0-flash-vl:free";
 
-async function callOpenRouter(model, messages) {
-  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+function apiKeyFromRequest(requestInfo) {
+  const fromHeader = requestInfo?.headers?.get("x-openrouter-api-key");
+  const authorization = requestInfo?.headers?.get("authorization") || "";
+  const bearer = authorization.replace(/^Bearer\s+/i, "").trim();
 
+  return (
+    fromHeader ||
+    bearer ||
+    process.env.OPENROUTER_API_KEY ||
+    ""
+  ).trim();
+}
+
+async function callOpenRouter(apiKey, model, messages) {
   if (!apiKey) {
     throw new Error(
-      "OPENROUTER_API_KEY is not configured on the MCP server."
+      "Missing OpenRouter API key. Configure OPENROUTER_API_KEY on Vercel or send it as the MCP Authorization bearer token."
     );
   }
 
@@ -49,15 +61,17 @@ async function callOpenRouter(model, messages) {
   return answer.trim();
 }
 
-function createServer() {
+function createServer({ requestInfo }) {
+  const apiKey = apiKeyFromRequest(requestInfo);
+
   const server = new McpServer(
     {
       name: "typesafe-kotlin-app",
-      version: "2.0.0"
+      version: "2.0.1"
     },
     {
       instructions:
-        "Use chat for normal AI answers, send-photo for image analysis, and send-file for text-file analysis."
+        "Use chat for natural-language AI answers, send-photo for image analysis, and send-file for text-file analysis. Free OpenRouter models are used."
     }
   );
 
@@ -74,7 +88,8 @@ function createServer() {
           text: JSON.stringify({
             ok: true,
             server: "typesafe-kotlin-app",
-            mcp: true
+            mcp: true,
+            openRouterKeyConfigured: Boolean(apiKey)
           })
         }
       ]
@@ -85,16 +100,17 @@ function createServer() {
     "chat",
     {
       description:
-        "Get a normal natural-language AI response using a free model.",
+        "Get a normal natural-language AI response using a free coding model.",
       inputSchema: z.object({
         message: z.string().min(1).max(12000)
       })
     },
     async ({ message }) => {
       try {
-        const answer = await callOpenRouter(FREE_TEXT_MODEL, [
+        const answer = await callOpenRouter(apiKey, FREE_TEXT_MODEL, [
           { role: "user", content: message }
         ]);
+
         return {
           content: [{ type: "text", text: answer }]
         };
@@ -127,7 +143,7 @@ function createServer() {
     },
     async ({ prompt, imageDataUrl }) => {
       try {
-        const answer = await callOpenRouter(FREE_VISION_MODEL, [
+        const answer = await callOpenRouter(apiKey, FREE_VISION_MODEL, [
           {
             role: "user",
             content: [
@@ -174,16 +190,16 @@ function createServer() {
     },
     async ({ filename, mimeType, content, prompt }) => {
       try {
-        const answer = await callOpenRouter(FREE_TEXT_MODEL, [
+        const answer = await callOpenRouter(apiKey, FREE_TEXT_MODEL, [
           {
             role: "user",
             content:
               (prompt || "Analyze this attached file and help me with it.") +
-              "\\n\\n[File: " +
+              "\n\n[File: " +
               filename +
               " | " +
               (mimeType || "text/plain") +
-              "]\\n" +
+              "]\n" +
               content
           }
         ]);
@@ -208,4 +224,9 @@ function createServer() {
   return server;
 }
 
-export default createMcpHandler(createServer);
+const handler = createMcpHandler(createServer, { responseMode: "json" });
+const nodeHandler = toNodeHandler(handler);
+
+export default function mcp(req, res) {
+  return nodeHandler(req, res);
+}
