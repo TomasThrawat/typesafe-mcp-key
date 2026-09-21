@@ -161,6 +161,53 @@ function modelCandidates(requestedModel, hasImages) {
   return FREE_TEXT_MODELS;
 }
 
+function extractText(value) {
+  if (typeof value === "string") return value.trim();
+
+  if (Array.isArray(value)) {
+    const parts = value.map((item) => extractText(item)).filter(Boolean);
+    return parts.length ? parts.join("\n").trim() : null;
+  }
+
+  if (value && typeof value === "object") {
+    const type = typeof value.type === "string"
+      ? value.type.toLowerCase()
+      : "";
+
+    if (type && !type.includes("text") && !type.includes("content")) {
+      return null;
+    }
+
+    for (const field of ["text", "content", "output_text", "value"]) {
+      const text = extractText(value[field]);
+      if (text) return text;
+    }
+  }
+
+  return null;
+}
+
+function extractAssistantText(data) {
+  const direct = extractText(data?.answer);
+  if (direct) return direct;
+
+  const choice = data?.choices?.[0];
+  const message = choice?.message;
+
+  for (const candidate of [
+    message?.content,
+    message?.output_text,
+    message?.text,
+    choice?.text,
+    choice?.delta?.content
+  ]) {
+    const text = extractText(candidate);
+    if (text) return text;
+  }
+
+  return null;
+}
+
 async function callOpenRouter(apiKey, model, messages) {
   const response = await fetch(
     "https://openrouter.ai/api/v1/chat/completions",
@@ -197,14 +244,14 @@ async function callOpenRouter(apiKey, model, messages) {
     throw error;
   }
 
-  const answer = data?.choices?.[0]?.message?.content;
+  const answer = extractAssistantText(data);
 
-  if (typeof answer !== "string" || !answer.trim()) {
+  if (!answer) {
     throw new Error("OpenRouter returned no assistant text.");
   }
 
   return {
-    answer: answer.trim(),
+    answer,
     model: data?.model || model,
     usage: data?.usage || null
   };

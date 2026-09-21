@@ -18,6 +18,53 @@ function apiKeyFromRequest(requestInfo) {
   ).trim();
 }
 
+function extractText(value) {
+  if (typeof value === "string") return value.trim();
+
+  if (Array.isArray(value)) {
+    const parts = value.map((item) => extractText(item)).filter(Boolean);
+    return parts.length ? parts.join("\n").trim() : null;
+  }
+
+  if (value && typeof value === "object") {
+    const type = typeof value.type === "string"
+      ? value.type.toLowerCase()
+      : "";
+
+    if (type && !type.includes("text") && !type.includes("content")) {
+      return null;
+    }
+
+    for (const field of ["text", "content", "output_text", "value"]) {
+      const text = extractText(value[field]);
+      if (text) return text;
+    }
+  }
+
+  return null;
+}
+
+function extractAssistantText(data) {
+  const direct = extractText(data?.answer);
+  if (direct) return direct;
+
+  const choice = data?.choices?.[0];
+  const message = choice?.message;
+
+  for (const candidate of [
+    message?.content,
+    message?.output_text,
+    message?.text,
+    choice?.text,
+    choice?.delta?.content
+  ]) {
+    const text = extractText(candidate);
+    if (text) return text;
+  }
+
+  return null;
+}
+
 async function callOpenRouter(apiKey, model, messages) {
   if (!apiKey) {
     throw new Error(
@@ -52,13 +99,13 @@ async function callOpenRouter(apiKey, model, messages) {
     );
   }
 
-  const answer = payload?.choices?.[0]?.message?.content;
+  const answer = extractAssistantText(payload);
 
-  if (typeof answer !== "string" || !answer.trim()) {
+  if (!answer) {
     throw new Error("OpenRouter returned no assistant text.");
   }
 
-  return answer.trim();
+  return answer;
 }
 
 function createServer({ requestInfo }) {
