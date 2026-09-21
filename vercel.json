@@ -1,1 +1,10 @@
-{}
+{
+  "functions": {
+    "api/health.js": {
+      "maxDuration": 10
+    },
+    "api/ask.js": {
+      "maxDuration": 60
+    }
+  }
+}
