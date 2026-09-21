@@ -30,12 +30,25 @@ async function readJson(req) {
 }
 
 function pickApiKey(req) {
-  return (
+  const headerKey =
     req.headers["x-openrouter-api-key"] ||
-    String(req.headers.authorization || "").replace(/^Bearer\\s+/i, "").trim() ||
-    process.env.OPENROUTER_API_KEY ||
-    ""
-  ).trim();
+    req.headers["X-OpenRouter-API-Key"] ||
+    "";
+
+  const authorization =
+    req.headers.authorization ||
+    req.headers.Authorization ||
+    "";
+
+  const bearerKey = String(authorization)
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+
+  return (
+    String(headerKey).trim() ||
+    bearerKey ||
+    String(process.env.OPENROUTER_API_KEY || "").trim()
+  );
 }
 
 function normalizeMessages(messages) {
@@ -327,3 +340,4 @@ export default async function handler(req, res) {
     });
   }
 }
+
