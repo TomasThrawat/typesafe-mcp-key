@@ -211,6 +211,7 @@ function extractAssistantText(data) {
     message?.content,
     message?.output_text,
     message?.text,
+    message?.refusal,
     choice?.text,
     choice?.delta?.content
   ]) {
@@ -260,7 +261,19 @@ async function callOpenRouter(apiKey, model, messages) {
   const answer = extractAssistantText(data);
 
   if (!answer) {
-    throw new Error("OpenRouter returned no assistant text.");
+    const choice = data?.choices?.[0] || {};
+    const finishReason = choice?.finish_reason || choice?.native_finish_reason || "";
+    const upstreamMessage =
+      extractText(data?.error?.message) ||
+      extractText(choice?.message?.refusal);
+    const detail =
+      upstreamMessage ||
+      (finishReason ? "finish_reason=" + finishReason : "empty response");
+    const error = new Error(
+      "OpenRouter returned no assistant text (" + detail + ")."
+    );
+    error.status = 502;
+    throw error;
   }
 
   return {
