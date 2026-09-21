@@ -1,20 +1,19 @@
 # TypeSafe MCP for Key
 
-A stateless Streamable HTTP MCP endpoint backed by TypeSafe System One.
+Public Streamable HTTP MCP bridge for TypeSafe AI System One.
 
-## Endpoint
+Endpoint after deployment:
+https://typesafe-mcp-key-hyouka1.vercel.app/
 
-After deployment:
+Authentication:
+- Preferred for Key/custom MCP clients: send `X-TypeSafe-API-Key`.
+- Standard Bearer Authorization is also accepted.
+- `TYPESAFE_API_KEY` may be configured as a server environment variable.
 
-`https://<deployment-domain>/api/mcp`
+The credential is intentionally not committed to the repository.
 
-## Environment
+Tools:
+- `health`
+- `system_one`
 
-Set `TYPESAFE_API_KEY` in the hosting provider as a secret. Never commit the key.
-
-## Tools
-
-- `system_one` - run typed TypeSafe decisions
-- `health` - health/configuration check
-
-The server uses the official TypeSafe JavaScript SDK and the official MCP TypeScript server package.
+The MCP HTTP implementation follows the official Model Context Protocol TypeScript SDK HTTP handler and Node adapter. The TypeSafe integration uses the official JavaScript SDK.
